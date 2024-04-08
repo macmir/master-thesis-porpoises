@@ -1,3 +1,4 @@
 
 image processing/keypoints_coco.json
 image processing/json_with_keypoints.json
+keypoint-detection/keypoint_detection/tasks/best_model.pth

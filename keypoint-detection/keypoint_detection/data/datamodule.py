@@ -89,20 +89,12 @@ class KeypointsDataModule(pl.LightningDataModule):
             img_height, img_width = self.train_dataset[0][0].shape[1], self.train_dataset[0][0].shape[2]
             aspect_ratio = img_width / img_height
             train_transform = MultiChannelKeypointsCompose(
-                # [
-                    # A.ColorJitter(p=0.8, brightness=(0, 3), saturation=(0, 10), hue=0.4),
-                    # A.RGBShift(r_shift_limit=(-20, 20), g_shift_limit=(-20, 20), b_shift_limit=(-20, 20), always_apply=False, p=0.5),
-                    # A.MotionBlur(blur_limit=33, p=0.6),
-                    #   A.GridDistortion(num_steps=5, distort_limit=0.1, p=0.1),
-                    #   A.VerticalFlip(p=0.5)
-                #     A.RandomBrightnessContrast(p=0.8),
-                #     A.RandomResizedCrop(
-                #         img_height, img_width, scale=(0.8, 1.0), ratio=(0.9 * aspect_ratio, 1.1 * aspect_ratio), p=1.0
-                #     ),
-                #     A.GaussianBlur(p=0.2, blur_limit=(3, 3)),
-                #     A.Sharpen(p=0.2),
-                #     A.GaussNoise(),
-                # ], keypoint_params=A.KeypointParams(format='xy')
+                [
+                    A.MotionBlur(blur_limit=33, p=0.1),
+                    A.ColorJitter(p=0.8, brightness=(0, 3), saturation=(0, 10), hue=0.4),
+                    A.VerticalFlip(p=0.6),
+                    A.Rotate(limit=[-90, 90], p=0.5)
+                ], keypoint_params=A.KeypointParams(format='xy')
             )
             if isinstance(self.train_dataset, COCOKeypointsDataset):
                 self.train_dataset.transform = train_transform
