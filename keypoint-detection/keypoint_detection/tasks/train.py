@@ -13,7 +13,7 @@ from keypoint_detection.models.detector import KeypointDetector
 from keypoint_detection.tasks.train_utils import create_pl_trainer, parse_channel_configuration
 from keypoint_detection.utils.load_checkpoints import get_model_from_wandb_checkpoint
 from keypoint_detection.utils.path import get_wandb_log_dir_path
-import torch
+
 
 def add_system_args(parent_parser: ArgumentParser) -> ArgumentParser:
     """
@@ -115,7 +115,6 @@ def train(hparams: dict) -> Tuple[KeypointDetector, pl.Trainer]:
         else:
             print(f"Using best checkpoint for test set evaluation: {ckpt_path}")
             ckpt_path = "best"
-            torch.save(model.state_dict(), 'best_model.pth')
         trainer.test(model, data_module, ckpt_path=ckpt_path)
 
     return model, trainer

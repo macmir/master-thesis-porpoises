@@ -14,7 +14,7 @@ from keypoint_detection.utils.visualization import (
     visualize_predicted_heatmaps,
     visualize_predicted_keypoints,
 )
-
+import sys
 
 class KeypointDetector(pl.LightningModule):
     """
@@ -75,12 +75,12 @@ class KeypointDetector(pl.LightningModule):
             help="the maximum number of keypoints to predict from the generated heatmaps. If set to -1, skimage will look for all peaks in the heatmap, if set to N (N>0) it will return the N most most certain ones.",
         )
         return parent_parser
-
+    
     @staticmethod
     def _neg_loss(pred, gt):
         ''' Modified focal loss. Exactly the same as CornerNet.
             Runs faster and costs a little bit more memory
-        Arguments:
+            Arguments:
             pred (batch x c x h x w)
             gt_regr (batch x c x h x w)
         '''
@@ -187,6 +187,8 @@ class KeypointDetector(pl.LightningModule):
         # this is for later reference (e.g. checkpoint loading) and consistency.
         self.save_hyperparameters(ignore=["**kwargs", "backbone"])
 
+        self._most_recent_val_mean_ap = 0.0 # used to store the most recent validation mean AP and log it in each epoch, so that checkpoint can be chosen based on this one.
+
     def forward(self, x: torch.Tensor):
         """
         x shape must be of shape (N,3,H,W)
@@ -248,19 +250,22 @@ class KeypointDetector(pl.LightningModule):
         predicted_heatmaps = torch.sigmoid(predicted_unnormalized_maps)
         channel_losses = []
         channel_gt_losses = []
-
+        # print(predicted_heatmaps.shape)
+        # sys.exit()
         result_dict = {}
         for channel_idx in range(len(self.keypoint_channel_configuration)):
             channel_losses.append(
-
-                self._neg_loss(
-                    predicted_heatmaps[:, channel_idx, :, :].squeeze(1),
-                    gt_heatmaps[channel_idx].squeeze(1)
-                )
-
                 # combines sigmoid with BCE for increased stability.
                 # nn.functional.binary_cross_entropy_with_logits(
                 #     predicted_unnormalized_maps[:, channel_idx, :, :], gt_heatmaps[channel_idx]
+                # )
+                self._neg_loss(
+                predicted_heatmaps[:, channel_idx, :, :], # Spróbuj odpalić bez squeeze
+                gt_heatmaps[channel_idx]
+                )
+                # self._neg_loss(
+                # predicted_heatmaps[:, channel_idx, :, :].squeeze(1), # Spróbuj odpalić bez squeeze
+                # gt_heatmaps[channel_idx].squeeze(1)
                 # )
             )
             with torch.no_grad():
@@ -338,7 +343,7 @@ class KeypointDetector(pl.LightningModule):
         for channel_configuration, grid in zip(self.keypoint_channel_configuration, image_grids):
             label = get_logging_label_from_channel_configuration(channel_configuration, mode)
             image_caption = "top: predicted heatmaps, bottom: gt heatmaps"
-            self.logger.experiment.log({label: wandb.Image(grid, caption=image_caption)})
+            self.logger.experiment.log({label: wandb.Image(grid, caption=image_caption,file_type="jpg")})
 
     def visualize_predicted_keypoints(self, result_dict):
         images = result_dict["input_images"]
@@ -420,6 +425,9 @@ class KeypointDetector(pl.LightningModule):
         self.log(f"{mode}/meanAP", mean_ap)
         self.log(f"{mode}/meanAP/meanAP", mean_ap)
 
+        if mode== "validation":
+            self._most_recent_val_mean_ap = mean_ap
+
     def training_epoch_end(self, outputs):
         """
         Called on the end of a training epoch.
@@ -435,6 +443,7 @@ class KeypointDetector(pl.LightningModule):
         """
         if self.is_ap_epoch():
             self.log_and_reset_mean_ap("validation")
+        self.log("checkpointing_metrics/valmeanAP", self._most_recent_val_mean_ap)
 
     def test_epoch_end(self, outputs):
         """
@@ -492,7 +501,7 @@ class KeypointDetector(pl.LightningModule):
         is_epch = is_epch or self.current_epoch == self.trainer.max_epochs - 1
 
         # if user manually specified a validation frequency, we should always log the AP in that epoch
-        is_epch = is_epch or (self.current_epoch > 0 and self.trainer.check_val_every_n_epoch > 1)
+        # is_epch = is_epch or (self.current_epoch > 0 and self.trainer.check_val_every_n_epoch > 1)
         return is_epch
 
     def extract_detected_keypoints_from_heatmap(self, heatmap: torch.Tensor) -> List[DetectedKeypoint]:
